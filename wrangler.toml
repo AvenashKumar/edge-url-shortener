@@ -16,7 +16,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "edge-url-shortener"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "57df93b3-005a-4eda-aa6f-d3199f4710ca"
 migrations_dir = "migrations"
 
 [vars]
