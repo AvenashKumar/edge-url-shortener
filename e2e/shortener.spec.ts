@@ -199,6 +199,13 @@ test.describe("Edge URL Shortener", () => {
     expect(fav.headers()["content-type"]).toContain("image/svg+xml");
   });
 
+  test("try-example fills the long URL box without creating a link", async ({ page }) => {
+    await page.goto("/");
+    await page.locator('.try-examples button[data-url*="quic-birth"]').click();
+    await expect(page.locator("#long-url")).toHaveValue("https://www.avenash-kumar.com/blog/quic-birth-of-new-protocol-in-layer4-family");
+    await expect(page.locator("#result")).toBeHidden();
+  });
+
   test("create a link through the form shows the result and a QR code", async ({ page }) => {
     const slug = uniq("ui");
     await page.goto("/");
