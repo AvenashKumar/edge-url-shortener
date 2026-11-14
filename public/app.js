@@ -73,8 +73,10 @@ async function loadStats() {
   const data = await res.json();
   $("analytics").classList.remove("hidden");
   $("analytics-title").textContent = `Analytics for /${currentSlug} - ${data.link.click_count} clicks`;
+  const fmtDate = (ms) => ms ? new Date(ms).toLocaleString() : "no clicks yet";
+  $("analytics-summary").textContent = `First click: ${fmtDate(data.firstClickAt)} - Last click: ${fmtDate(data.lastClickAt)}`;
   drawChart(data.byDay || []);
-  const groups = [["Country", data.byCountry], ["Device", data.byDevice], ["Browser", data.byBrowser], ["Referrer", data.byReferrer]];
+  const groups = [["Country", data.byCountry], ["Device", data.byDevice], ["Browser", data.byBrowser], ["Operating system", data.byOs], ["Browser version", data.byBrowserVersion], ["Device model", data.byDeviceModel], ["Bot or human", data.byBot], ["City", data.byCity], ["Region", data.byRegion], ["Timezone", data.byTimezone], ["Network", data.byAsn], ["Edge location", data.byColo], ["TLS version", data.byTls], ["Hour of day (UTC)", data.byHour], ["Day of week", data.byDayOfWeek], ["Referrer domain", data.byReferrerDomain], ["Referrer", data.byReferrer]];
   $("breakdown").innerHTML = groups.map(([title, rows]) => `<div><h3>${title}</h3>${(rows || []).map((r) => `<p>${r.k}: <strong>${r.c}</strong></p>`).join("") || '<p class="muted">No clicks yet in this range.</p>'}</div>`).join("");
   $("analytics").scrollIntoView({ behavior: "smooth" });
 }
