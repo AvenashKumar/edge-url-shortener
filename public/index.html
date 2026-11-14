@@ -33,6 +33,11 @@
     <h2>Create a short link</h2>
     <form id="create-form">
       <label>Long URL<input id="long-url" type="url" placeholder="https://example.com/a/very/long/page" required></label>
+      <p class="try-examples">Try:
+        <button type="button" data-url="https://www.avenash-kumar.com/blog/quic-birth-of-new-protocol-in-layer4-family">QUIC blog post</button>
+        <button type="button" data-url="https://github.com/AvenashKumar/edge-url-shortener">This project on GitHub</button>
+        <button type="button" data-url="https://example.com/a/very/long/page?with=tracking&amp;utm_source=demo">Long page with tracking</button>
+      </p>
       <div class="row">
         <label>Custom slug (optional)<input id="slug" type="text" placeholder="my-link" pattern="[A-Za-z0-9_-]{3,64}" title="3 to 64 letters, numbers, hyphens, or underscores"></label>
         <label>Expires (optional)<input id="expires" type="date"></label>
