@@ -1,0 +1,269 @@
+import { test, expect, request } from "@playwright/test";
+
+const baseURL = process.env.E2E_BASE_URL || "https://go.avenash-kumar.com";
+const proxyServer = process.env.HTTPS_PROXY || process.env.https_proxy;
+const api = () => request.newContext(proxyServer && !baseURL.includes("localhost") ? { proxy: { server: proxyServer } } : {});
+const uniq = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+async function createLink(ctx: Awaited<ReturnType<typeof api>>, data: Record<string, unknown>) {
+  return ctx.post(`${baseURL}/api/links`, { data });
+}
+
+async function deleteLink(ctx: Awaited<ReturnType<typeof api>>, slug: string) {
+  await ctx.delete(`${baseURL}/api/links/${slug}`);
+}
+
+test.describe("Edge URL Shortener", () => {
+  test("@api health returns ok", async () => {
+    const ctx = await api();
+    const res = await ctx.get(`${baseURL}/health`);
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    await ctx.dispose();
+  });
+
+  test("@api create, redirect, and delete a link, cleaning up after itself", async () => {
+    const ctx = await api();
+    const slug = uniq("e2e");
+    const create = await createLink(ctx, { url: "https://example.com", slug });
+    expect(create.status(), await create.text()).toBe(201);
+    const created = await create.json();
+    expect(created.slug).toBe(slug);
+    expect(created.shortUrl).toContain(`/${slug}`);
+
+    const redirect = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(302);
+    expect(redirect.headers().location).toBe("https://example.com/");
+
+    const del = await ctx.delete(`${baseURL}/api/links/${slug}`);
+    expect(del.status()).toBe(200);
+    const gone = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(gone.status()).toBe(404);
+    await ctx.dispose();
+  });
+
+  test("@api create without a slug generates a random one", async () => {
+    const ctx = await api();
+    const create = await createLink(ctx, { url: "https://example.com" });
+    expect(create.status(), await create.text()).toBe(201);
+    const created = await create.json();
+    expect(created.slug).toMatch(/^[A-Za-z0-9]{6}$/);
+    const redirect = await ctx.get(`${baseURL}/${created.slug}`, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(302);
+    await deleteLink(ctx, created.slug);
+    await ctx.dispose();
+  });
+
+  test("@api an expired link returns 410", async () => {
+    const ctx = await api();
+    const slug = uniq("exp");
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const create = await createLink(ctx, { url: "https://example.com", slug, expiresAt: past });
+    expect(create.status()).toBe(201);
+    const redirect = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(410);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("@api a click limit returns 410 after the limit is reached", async () => {
+    const ctx = await api();
+    const slug = uniq("lim");
+    const create = await createLink(ctx, { url: "https://example.com", slug, maxClicks: 1 });
+    expect(create.status()).toBe(201);
+    const first = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(first.status()).toBe(302);
+    const second = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(second.status()).toBe(410);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("@api pause returns 410 and resume restores the redirect", async () => {
+    const ctx = await api();
+    const slug = uniq("pau");
+    const create = await createLink(ctx, { url: "https://example.com", slug });
+    expect(create.status()).toBe(201);
+    const paused = await ctx.patch(`${baseURL}/api/links/${slug}`, { data: { paused: true } });
+    expect(paused.status()).toBe(200);
+    const blocked = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(blocked.status()).toBe(410);
+    const resumed = await ctx.patch(`${baseURL}/api/links/${slug}`, { data: { paused: false } });
+    expect(resumed.status()).toBe(200);
+    const ok = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(ok.status()).toBe(302);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("@api stats show clicks and device and browser breakdowns", async () => {
+    const ctx = await api();
+    const slug = uniq("st");
+    const create = await createLink(ctx, { url: "https://example.com", slug });
+    expect(create.status()).toBe(201);
+    await ctx.get(`${baseURL}/${slug}`, {
+      maxRedirects: 0,
+      headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0 Safari/537.36" },
+    });
+    await ctx.get(`${baseURL}/${slug}`, {
+      maxRedirects: 0,
+      headers: { "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148" },
+    });
+    const stats = await ctx.get(`${baseURL}/api/links/${slug}/stats?days=7`);
+    expect(stats.status()).toBe(200);
+    const data = await stats.json();
+    expect(data.link.click_count).toBe(2);
+    expect(data.byDevice.map((r: { k: string }) => r.k)).toContain("Desktop");
+    expect(data.byDevice.map((r: { k: string }) => r.k)).toContain("Mobile");
+    expect(data.byBrowser.map((r: { k: string }) => r.k)).toContain("Chrome");
+    expect(Array.isArray(data.byDay)).toBe(true);
+    expect(Array.isArray(data.byCountry)).toBe(true);
+    expect(Array.isArray(data.byReferrer)).toBe(true);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("@api slug validation rejects bad slugs, reserved slugs, and bad options", async () => {
+    const ctx = await api();
+    const short = await createLink(ctx, { url: "https://example.com", slug: "ab" });
+    expect(short.status()).toBe(400);
+    const chars = await createLink(ctx, { url: "https://example.com", slug: "bad slug!" });
+    expect(chars.status()).toBe(400);
+    const reserved = await createLink(ctx, { url: "https://example.com", slug: "api" });
+    expect(reserved.status()).toBe(400);
+    const badExpiry = await createLink(ctx, { url: "https://example.com", slug: uniq("ok"), expiresAt: "not-a-date" });
+    expect(badExpiry.status()).toBe(400);
+    const badLimit = await createLink(ctx, { url: "https://example.com", slug: uniq("ok"), maxClicks: 0 });
+    expect(badLimit.status()).toBe(400);
+    await ctx.dispose();
+  });
+
+  test("@api invalid URL is rejected and duplicate slug returns 409", async () => {
+    const ctx = await api();
+    const bad = await createLink(ctx, { url: "not-a-url", slug: uniq("bad") });
+    expect(bad.status()).toBe(400);
+    const slug = uniq("dup");
+    const first = await createLink(ctx, { url: "https://example.com", slug });
+    expect(first.status()).toBe(201);
+    const dup = await createLink(ctx, { url: "https://example.com", slug });
+    expect(dup.status()).toBe(409);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("@api search and paused filter narrow the links list", async () => {
+    const ctx = await api();
+    const token = uniq("tok");
+    const slugA = `${token}-a`;
+    const slugB = `${token}-b`;
+    expect((await createLink(ctx, { url: "https://example.com", slug: slugA })).status()).toBe(201);
+    expect((await createLink(ctx, { url: "https://example.com", slug: slugB })).status()).toBe(201);
+    const found = await ctx.get(`${baseURL}/api/links?search=${token}`);
+    expect(found.status()).toBe(200);
+    const foundData = await found.json();
+    expect(foundData.links.map((l: { slug: string }) => l.slug)).toEqual(expect.arrayContaining([slugA, slugB]));
+    await ctx.patch(`${baseURL}/api/links/${slugA}`, { data: { paused: true } });
+    const paused = await ctx.get(`${baseURL}/api/links?search=${token}&filter=paused`);
+    const pausedData = await paused.json();
+    expect(pausedData.links.map((l: { slug: string }) => l.slug)).toEqual([slugA]);
+    await deleteLink(ctx, slugA);
+    await deleteLink(ctx, slugB);
+    await ctx.dispose();
+  });
+
+  test("@api stats for an unknown slug returns 404", async () => {
+    const ctx = await api();
+    const res = await ctx.get(`${baseURL}/api/links/no-such-slug-xyz/stats`);
+    expect(res.status()).toBe(404);
+    await ctx.dispose();
+  });
+
+  test("@api links list reports a total at or under the 100 link limit", async () => {
+    const ctx = await api();
+    const res = await ctx.get(`${baseURL}/api/links`);
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(data.totalLinks).toBeLessThanOrEqual(100);
+    await ctx.dispose();
+  });
+
+  test("homepage loads with create form, links list, and favicon", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#long-url")).toBeVisible();
+    await expect(page.locator("#slug")).toBeVisible();
+    await expect(page.locator("#create-form")).toBeVisible();
+    await expect(page.locator("#links-list")).toBeVisible();
+    const fav = await page.request.get("/favicon.svg");
+    expect(fav.status()).toBe(200);
+    expect(fav.headers()["content-type"]).toContain("image/svg+xml");
+  });
+
+  test("create a link through the form shows the result and a QR code", async ({ page }) => {
+    const slug = uniq("ui");
+    await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(slug);
+    await page.locator("#create-form button[type='submit']").click();
+    await expect(page.locator("#short-url")).toContainText(`/${slug}`);
+    await expect(page.locator("#qr")).toBeVisible();
+    await expect(page.locator("#links-list")).toContainText(slug);
+    const ctx = await api();
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("search box filters the links list in the UI", async ({ page }) => {
+    const ctx = await api();
+    const token = uniq("ui");
+    const slug = `${token}-a`;
+    expect((await createLink(ctx, { url: "https://example.com", slug })).status()).toBe(201);
+    await page.goto("/");
+    await expect(page.locator("#links-list")).toContainText(slug);
+    await page.locator("#search").fill("no-such-token-xyz");
+    await page.waitForTimeout(500);
+    await expect(page.locator("#links-list")).not.toContainText(slug);
+    await page.locator("#search").fill(token);
+    await page.waitForTimeout(500);
+    await expect(page.locator("#links-list")).toContainText(slug);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("pause, resume, and delete work from the list buttons", async ({ page }) => {
+    const ctx = await api();
+    const slug = uniq("ui");
+    expect((await createLink(ctx, { url: "https://example.com", slug })).status()).toBe(201);
+    await page.goto("/");
+    const row = page.locator("#links-list", { hasText: slug });
+    await expect(row).toBeVisible();
+    await page.locator(`[data-pause="${slug}"]`).click();
+    await expect(page.locator(`[data-pause="${slug}"]`)).toHaveText("Resume");
+    const blocked = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(blocked.status()).toBe(410);
+    await page.locator(`[data-pause="${slug}"]`).click();
+    await expect(page.locator(`[data-pause="${slug}"]`)).toHaveText("Pause");
+    const ok = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    expect(ok.status()).toBe(302);
+    page.on("dialog", (d) => d.accept());
+    await page.locator(`[data-del="${slug}"]`).click();
+    await expect(page.locator("#links-list")).not.toContainText(slug);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("analytics panel opens for a link and switches day ranges", async ({ page }) => {
+    const ctx = await api();
+    const slug = uniq("ui");
+    expect((await createLink(ctx, { url: "https://example.com", slug })).status()).toBe(201);
+    await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    await page.goto("/");
+    await page.locator(`[data-stats="${slug}"]`).click();
+    await expect(page.locator("#analytics")).toBeVisible();
+    await expect(page.locator("#analytics-title")).toContainText(slug);
+    await expect(page.locator("#analytics-title")).toContainText("1 clicks");
+    await page.locator('[data-days="30"]').click();
+    await expect(page.locator('[data-days="30"]')).toHaveClass(/active/);
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+});
