@@ -6,6 +6,7 @@ export interface Env {
 
 const SLUG_RE = /^[a-zA-Z0-9_-]{3,64}$/;
 const RESERVED = new Set(["api", "admin", "assets", "static", "health", "login", "signup"]);
+const MAX_LINKS = 100;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -83,6 +84,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (expiresAt && Number.isNaN(expiresAt)) return json({ error: "Invalid expiry date" }, 400);
     if (maxClicks !== null && (!Number.isInteger(maxClicks) || maxClicks < 1)) {
       return json({ error: "Click limit must be a whole number of 1 or more" }, 400);
+    }
+
+    const count = await env.DB.prepare("SELECT COUNT(*) AS c FROM links").first() as any;
+    if ((count?.c || 0) >= MAX_LINKS) {
+      return json({ error: "Link limit reached. This service is limited to 100 links in total. Delete an old link to create a new one." }, 429);
     }
 
     try {
