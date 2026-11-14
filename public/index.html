@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edge URL Shortener and Analytics - go.avenash-kumar.com</title>
+<meta name="description" content="Shorten links with custom slugs, QR codes, and click analytics by country and device. Runs on Cloudflare Workers and D1.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="/">go<span>.</span>avenash-kumar.com</a>
+    <nav><a href="#create">Create</a><a href="#links">Links</a><a href="https://github.com/AvenashKumar/edge-url-shortener" target="_blank" rel="noreferrer" class="github-cta">GitHub</a></nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container hero-inner">
+    <span class="tag">Cloudflare Workers + D1</span>
+    <h1>Short links, <span class="accent">real analytics.</span></h1>
+    <p class="lede">Shorten a link with a custom slug, grab its QR code, and track clicks by country and device. Free, fast at the edge, no signup needed.</p>
+    <div class="trust"><span>✓ Custom slugs</span><span>✓ QR codes</span><span>✓ Click analytics</span></div>
+  </div>
+</section>
+
+<main class="container">
+  <section id="create" class="card create-card">
+    <h2>Create a short link</h2>
+    <form id="create-form">
+      <label>Long URL<input id="long-url" type="url" placeholder="https://example.com/a/very/long/page" required></label>
+      <div class="row">
+        <label>Custom slug (optional)<input id="slug" type="text" placeholder="my-link" pattern="[A-Za-z0-9_-]{3,64}" title="3 to 64 letters, numbers, hyphens, or underscores"></label>
+        <label>Expires (optional)<input id="expires" type="date"></label>
+        <label>Click limit (optional)<input id="max-clicks" type="number" min="1" placeholder="100"></label>
+      </div>
+      <button class="btn-primary" type="submit">Shorten link</button>
+      <p id="form-error" class="error" role="alert"></p>
+    </form>
+    <div id="result" class="result hidden">
+      <div>
+        <p class="muted">Your short link</p>
+        <p class="short-url" id="short-url"></p>
+        <p class="muted" id="result-meta"></p>
+        <div class="actions"><button class="btn" id="copy-btn">Copy link</button><button class="btn" id="open-btn">Open</button></div>
+      </div>
+      <canvas id="qr" width="160" height="160"></canvas>
+    </div>
+  </section>
+
+  <section class="stats" id="stats">
+    <div class="stat"><strong id="total-links">0</strong><span>Total links</span></div>
+    <div class="stat"><strong id="total-clicks">0</strong><span>Total clicks</span></div>
+    <div class="stat"><strong id="active-links">0</strong><span>Active links</span></div>
+  </section>
+
+  <section id="links" class="card">
+    <div class="links-head">
+      <h2>Your links</h2>
+      <div class="filters">
+        <input id="search" type="search" placeholder="Search slug or URL">
+        <select id="filter"><option value="all">All</option><option value="paused">Paused</option><option value="expired">Expired</option></select>
+        <button class="btn" id="refresh">Refresh</button>
+      </div>
+    </div>
+    <div id="links-list" class="links-list"><p class="muted">Loading links...</p></div>
+  </section>
+
+  <section id="analytics" class="card hidden">
+    <h2 id="analytics-title">Analytics</h2>
+    <div class="range"><button data-days="7" class="chip active">7 days</button><button data-days="14" class="chip">14 days</button><button data-days="30" class="chip">30 days</button></div>
+    <canvas id="chart" width="800" height="220"></canvas>
+    <div class="breakdown" id="breakdown"></div>
+  </section>
+</main>
+
+<footer><div class="container"><p>Built by Avenash Kumar. Code on <a href="https://github.com/AvenashKumar/edge-url-shortener">GitHub</a>. Runs on Cloudflare Workers and D1.</p></div></footer>
+<script src="/app.js"></script>
+</body>
+</html>
