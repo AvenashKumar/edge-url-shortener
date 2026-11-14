@@ -76,8 +76,20 @@ async function loadStats() {
   const fmtDate = (ms) => ms ? new Date(ms).toLocaleString() : "no clicks yet";
   $("analytics-summary").textContent = `First click: ${fmtDate(data.firstClickAt)} - Last click: ${fmtDate(data.lastClickAt)}`;
   drawChart(data.byDay || []);
-  const groups = [["Country", data.byCountry], ["Device", data.byDevice], ["Browser", data.byBrowser], ["Operating system", data.byOs], ["Browser version", data.byBrowserVersion], ["Device model", data.byDeviceModel], ["Bot or human", data.byBot], ["City", data.byCity], ["Region", data.byRegion], ["Timezone", data.byTimezone], ["Network", data.byAsn], ["Edge location", data.byColo], ["TLS version", data.byTls], ["Hour of day (UTC)", data.byHour], ["Day of week", data.byDayOfWeek], ["Referrer domain", data.byReferrerDomain], ["Referrer", data.byReferrer]];
-  $("breakdown").innerHTML = groups.map(([title, rows]) => `<div><h3>${title}</h3>${(rows || []).map((r) => `<p>${r.k}: <strong>${r.c}</strong></p>`).join("") || '<p class="muted">No clicks yet in this range.</p>'}</div>`).join("");
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const groupHtml = ([title, rows]) => `<div><h3>${title}</h3>${(rows || []).map((r) => `<p>${esc(r.k)}: <strong>${r.c}</strong></p>`).join("") || '<p class="muted">No clicks yet in this range.</p>'}</div>`;
+  const sections = [
+    ["Where clicks came from", [["Country", data.byCountry], ["City", data.byCity], ["Region", data.byRegion], ["Timezone", data.byTimezone]]],
+    ["Devices and software", [["Device", data.byDevice], ["Device model", data.byDeviceModel], ["Operating system", data.byOs], ["Browser", data.byBrowser], ["Browser version", data.byBrowserVersion], ["Bot or human", data.byBot]]],
+    ["Traffic and timing", [["Referrer domain", data.byReferrerDomain], ["Referrer", data.byReferrer], ["Hour of day (UTC)", data.byHour], ["Day of week", data.byDayOfWeek]]],
+    ["Network and edge", [["Network", data.byAsn], ["Edge location", data.byColo], ["TLS version", data.byTls]]],
+  ];
+  const topOf = (groups) => {
+    let best = null;
+    for (const [, rows] of groups) for (const r of (rows || [])) if (!best || r.c > best.c) best = r;
+    return best ? `Top: ${esc(best.k)} (${best.c})` : "";
+  };
+  $("breakdown").innerHTML = sections.map(([title, groups], i) => `<details${i === 0 ? " open" : ""}><summary><span>${title}</span><span class="top">${topOf(groups)}</span></summary><div class="groups">${groups.map(groupHtml).join("")}</div></details>`).join("");
   $("analytics").scrollIntoView({ behavior: "smooth" });
 }
 
