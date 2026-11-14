@@ -323,4 +323,26 @@ test.describe("Edge URL Shortener", () => {
     await deleteLink(ctx, slug);
     await ctx.dispose();
   });
+
+  test("analytics breakdowns are grouped into collapsible sections", async ({ page }) => {
+    const slug = uniq("ui");
+    await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(slug);
+    await page.locator("#create-form button[type='submit']").click();
+    const ctx = await api();
+    await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
+    await page.locator(`[data-stats="${slug}"]`).click();
+    await expect(page.locator("#analytics")).toBeVisible();
+    const sections = page.locator("#breakdown details");
+    await expect(sections).toHaveCount(4);
+    await expect(sections.nth(0)).toHaveAttribute("open", "");
+    await expect(sections.nth(1)).not.toHaveAttribute("open", "");
+    await expect(sections.nth(0).locator("summary")).toContainText("Where clicks came from");
+    await sections.nth(1).locator("summary").click();
+    await expect(sections.nth(1)).toHaveAttribute("open", "");
+    await expect(page.locator("#breakdown")).toContainText("Operating system");
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
 });
