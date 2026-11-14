@@ -80,8 +80,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const id = crypto.randomUUID();
     const now = Date.now();
     const expiresAt = body.expiresAt ? Date.parse(body.expiresAt) : null;
-    const maxClicks = body.maxClicks ? Number(body.maxClicks) : null;
-    if (expiresAt && Number.isNaN(expiresAt)) return json({ error: "Invalid expiry date" }, 400);
+    const maxClicks = body.maxClicks !== undefined && body.maxClicks !== null ? Number(body.maxClicks) : null;
+    if (body.expiresAt && Number.isNaN(expiresAt)) return json({ error: "Invalid expiry date" }, 400);
     if (maxClicks !== null && (!Number.isInteger(maxClicks) || maxClicks < 1)) {
       return json({ error: "Click limit must be a whole number of 1 or more" }, 400);
     }
