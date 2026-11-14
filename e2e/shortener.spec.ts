@@ -324,7 +324,7 @@ test.describe("Edge URL Shortener", () => {
     await ctx.dispose();
   });
 
-  test("analytics breakdowns are grouped into collapsible sections", async ({ page }) => {
+  test("analytics breakdowns use a sidebar layout", async ({ page }) => {
     const slug = uniq("ui");
     await page.goto("/");
     await page.locator("#long-url").fill("https://example.com");
@@ -334,14 +334,14 @@ test.describe("Edge URL Shortener", () => {
     await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
     await page.locator(`[data-stats="${slug}"]`).click();
     await expect(page.locator("#analytics")).toBeVisible();
-    const sections = page.locator("#breakdown details");
-    await expect(sections).toHaveCount(4);
-    await expect(sections.nth(0)).toHaveAttribute("open", "");
-    await expect(sections.nth(1)).not.toHaveAttribute("open", "");
-    await expect(sections.nth(0).locator("summary")).toContainText("Where clicks came from");
-    await sections.nth(1).locator("summary").click();
-    await expect(sections.nth(1)).toHaveAttribute("open", "");
-    await expect(page.locator("#breakdown")).toContainText("Operating system");
+    const nav = page.locator("#analytics-nav button");
+    await expect(nav).toHaveCount(4);
+    await expect(nav.nth(0)).toHaveClass(/active/);
+    await expect(page.locator("#analytics-pane")).toContainText("Country");
+    await nav.nth(1).click();
+    await expect(nav.nth(1)).toHaveClass(/active/);
+    await expect(page.locator("#analytics-pane")).toContainText("Operating system");
+    await expect(page.locator("#analytics-pane")).not.toContainText("Country");
     await deleteLink(ctx, slug);
     await ctx.dispose();
   });
