@@ -63,7 +63,7 @@ export default {
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   const parts = url.pathname.split("/").filter(Boolean);
 
-  if (parts[1] === "links" && request.method === "POST") {
+  if (parts[1] === "links" && request.method === "POST" && parts.length === 2) {
     const body = await request.json().catch(() => null) as any;
     if (!body || typeof body.url !== "string") return json({ error: "url is required" }, 400);
     let target: URL;
@@ -102,21 +102,18 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({ id, slug, url: target.toString(), shortUrl: `${base}/${slug}`, createdAt: now, expiresAt, maxClicks, clickCount: 0, paused: false }, 201);
   }
 
-  if (parts[1] === "links" && request.method === "GET" && parts.length === 2) {
-    const search = url.searchParams.get("search") || "";
-    const filter = url.searchParams.get("filter") || "all";
-    let sql = "SELECT * FROM links";
-    const params: unknown[] = [];
-    const where: string[] = [];
-    if (search) { where.push("(slug LIKE ? OR url LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
-    if (filter === "paused") where.push("paused = 1");
-    if (filter === "expired") where.push("expires_at IS NOT NULL AND expires_at < ?");
-    if (filter === "expired") params.push(Date.now());
-    if (where.length) sql += " WHERE " + where.join(" AND ");
-    sql += " ORDER BY created_at DESC LIMIT 200";
-    const rows = await env.DB.prepare(sql).bind(...params).all();
-    const total = await env.DB.prepare("SELECT COUNT(*) AS c, COALESCE(SUM(click_count), 0) AS clicks FROM links").first() as any;
-    return json({ links: rows.results || [], totalLinks: total?.c || 0, totalClicks: total?.clicks || 0 });
+  if (parts[1] === "stats" && request.method === "GET" && parts.length === 2) {
+    const total = await env.DB.prepare("SELECT COUNT(*) AS c, COALESCE(SUM(click_count), 0) AS clicks, COALESCE(SUM(CASE WHEN paused = 0 THEN 1 ELSE 0 END), 0) AS active FROM links").first() as any;
+    return json({ totalLinks: total?.c || 0, totalClicks: total?.clicks || 0, activeLinks: total?.active || 0 });
+  }
+
+  if (parts[1] === "links" && parts[2] === "lookup" && request.method === "POST") {
+    const body = await request.json().catch(() => null) as any;
+    const slugs = Array.isArray(body?.slugs) ? body.slugs.filter((s: unknown) => typeof s === "string" && SLUG_RE.test(s)).slice(0, 100) : [];
+    if (!slugs.length) return json({ links: [] });
+    const placeholders = slugs.map(() => "?").join(",");
+    const rows = await env.DB.prepare(`SELECT * FROM links WHERE slug IN (${placeholders}) ORDER BY created_at DESC`).bind(...slugs).all();
+    return json({ links: rows.results || [] });
   }
 
   if (parts[1] === "links" && parts.length === 4 && parts[3] === "stats") {
