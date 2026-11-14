@@ -114,4 +114,8 @@ $("create-form").addEventListener("submit", async (e) => {
 $("search").addEventListener("input", loadLinks);
 $("filter").addEventListener("change", loadLinks);
 $("refresh").addEventListener("click", loadLinks);
+document.querySelectorAll(".try-examples button").forEach((b) => b.addEventListener("click", () => {
+  $("long-url").value = b.dataset.url;
+  $("long-url").focus();
+}));
 loadLinks();
