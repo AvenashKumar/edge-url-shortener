@@ -151,21 +151,20 @@ test.describe("Edge URL Shortener", () => {
     await ctx.dispose();
   });
 
-  test("@api search and paused filter narrow the links list", async () => {
+  test("@api lookup returns only the requested slugs, never a global list", async () => {
     const ctx = await api();
-    const token = uniq("tok");
-    const slugA = `${token}-a`;
-    const slugB = `${token}-b`;
+    const slugA = uniq("lk");
+    const slugB = uniq("lk");
     expect((await createLink(ctx, { url: "https://example.com", slug: slugA })).status()).toBe(201);
     expect((await createLink(ctx, { url: "https://example.com", slug: slugB })).status()).toBe(201);
-    const found = await ctx.get(`${baseURL}/api/links?search=${token}`);
+    const found = await ctx.post(`${baseURL}/api/links/lookup`, { data: { slugs: [slugA, slugB] } });
     expect(found.status()).toBe(200);
     const foundData = await found.json();
-    expect(foundData.links.map((l: { slug: string }) => l.slug)).toEqual(expect.arrayContaining([slugA, slugB]));
-    await ctx.patch(`${baseURL}/api/links/${slugA}`, { data: { paused: true } });
-    const paused = await ctx.get(`${baseURL}/api/links?search=${token}&filter=paused`);
-    const pausedData = await paused.json();
-    expect(pausedData.links.map((l: { slug: string }) => l.slug)).toEqual([slugA]);
+    expect(foundData.links.map((l: { slug: string }) => l.slug).sort()).toEqual([slugA, slugB].sort());
+    const missing = await ctx.post(`${baseURL}/api/links/lookup`, { data: { slugs: ["no-such-slug-xyz"] } });
+    expect((await missing.json()).links).toEqual([]);
+    const empty = await ctx.post(`${baseURL}/api/links/lookup`, { data: { slugs: [] } });
+    expect((await empty.json()).links).toEqual([]);
     await deleteLink(ctx, slugA);
     await deleteLink(ctx, slugB);
     await ctx.dispose();
@@ -178,12 +177,14 @@ test.describe("Edge URL Shortener", () => {
     await ctx.dispose();
   });
 
-  test("@api links list reports a total at or under the 100 link limit", async () => {
+  test("@api stats returns totals without listing any links", async () => {
     const ctx = await api();
-    const res = await ctx.get(`${baseURL}/api/links`);
+    const res = await ctx.get(`${baseURL}/api/stats`);
     expect(res.status()).toBe(200);
     const data = await res.json();
     expect(data.totalLinks).toBeLessThanOrEqual(100);
+    expect(typeof data.totalClicks).toBe("number");
+    expect(data.links).toBeUndefined();
     await ctx.dispose();
   });
 
@@ -213,11 +214,12 @@ test.describe("Edge URL Shortener", () => {
   });
 
   test("search box filters the links list in the UI", async ({ page }) => {
-    const ctx = await api();
     const token = uniq("ui");
     const slug = `${token}-a`;
-    expect((await createLink(ctx, { url: "https://example.com", slug })).status()).toBe(201);
     await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(slug);
+    await page.locator("#create-form button[type='submit']").click();
     await expect(page.locator("#links-list")).toContainText(slug);
     await page.locator("#search").fill("no-such-token-xyz");
     await page.waitForTimeout(500);
@@ -225,17 +227,36 @@ test.describe("Edge URL Shortener", () => {
     await page.locator("#search").fill(token);
     await page.waitForTimeout(500);
     await expect(page.locator("#links-list")).toContainText(slug);
+    const ctx = await api();
     await deleteLink(ctx, slug);
     await ctx.dispose();
   });
 
-  test("pause, resume, and delete work from the list buttons", async ({ page }) => {
+  test("links list shows only links created in this browser, not other people's", async ({ page }) => {
     const ctx = await api();
-    const slug = uniq("ui");
-    expect((await createLink(ctx, { url: "https://example.com", slug })).status()).toBe(201);
+    const mine = uniq("mine");
+    const other = uniq("other");
+    expect((await createLink(ctx, { url: "https://example.com", slug: other })).status()).toBe(201);
     await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(mine);
+    await page.locator("#create-form button[type='submit']").click();
+    await expect(page.locator("#links-list")).toContainText(mine);
+    await expect(page.locator("#links-list")).not.toContainText(other);
+    await deleteLink(ctx, mine);
+    await deleteLink(ctx, other);
+    await ctx.dispose();
+  });
+
+  test("pause, resume, and delete work from the list buttons", async ({ page }) => {
+    const slug = uniq("ui");
+    await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(slug);
+    await page.locator("#create-form button[type='submit']").click();
     const row = page.locator("#links-list", { hasText: slug });
     await expect(row).toBeVisible();
+    const ctx = await api();
     await page.locator(`[data-pause="${slug}"]`).click();
     await expect(page.locator(`[data-pause="${slug}"]`)).toHaveText("Resume");
     const blocked = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
@@ -252,11 +273,13 @@ test.describe("Edge URL Shortener", () => {
   });
 
   test("analytics panel opens for a link and switches day ranges", async ({ page }) => {
-    const ctx = await api();
     const slug = uniq("ui");
-    expect((await createLink(ctx, { url: "https://example.com", slug })).status()).toBe(201);
-    await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
     await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(slug);
+    await page.locator("#create-form button[type='submit']").click();
+    const ctx = await api();
+    await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
     await page.locator(`[data-stats="${slug}"]`).click();
     await expect(page.locator("#analytics")).toBeVisible();
     await expect(page.locator("#analytics-title")).toContainText(slug);
