@@ -48,7 +48,8 @@ Do not paste tokens or account IDs in chat. Add them only in GitHub Secrets.
 ## API
 
 - `POST /api/links` with `{ url, slug, expiresAt, maxClicks }`
-- `GET /api/links?search=&filter=`
+- `POST /api/links/lookup` with `{ slugs: [] }`, returns only the requested links. There is no endpoint that lists every link, so no visitor can enumerate other people's links. The frontend stores the slugs you create in your browser's localStorage and looks those up.
+- `GET /api/stats` returns only totals: totalLinks, totalClicks, activeLinks
 - `GET /api/links/:slug/stats?days=7`
 - `PATCH /api/links/:slug` with `{ paused }`
 - `DELETE /api/links/:slug`
@@ -57,3 +58,15 @@ Do not paste tokens or account IDs in chat. Add them only in GitHub Secrets.
 ## Design
 
 The UI uses an improvised palette inspired by a clean premium style, not a copy of any other brand. Hero: deep midnight #0B1526 to indigo #3730A3. Primary: electric indigo #4F46E5. Accent: teal #2DD4BF. Headings: ink #0F172A. Font: Manrope.
+
+## E2E tests
+
+Playwright tests in `e2e/` run against the live site by default (`https://go.avenash-kumar.com`, override with `E2E_BASE_URL`):
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
+
+They cover health, homepage and theme toggle, creating, redirecting and deleting a link (the test deletes its own link, so it does not count toward the 100 link limit), invalid URLs, duplicate slugs, and the links list total. The `E2E tests` workflow in `.github/workflows/e2e.yml` runs them on every push to main and on pull requests.
