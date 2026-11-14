@@ -1,6 +1,8 @@
 const $ = (id) => document.getElementById(id);
 let currentSlug = null;
 let currentDays = 7;
+let currentSection = 0;
+let lastStats = null;
 const MY_LINKS_KEY = "go-shortener-links";
 
 function readMySlugs() {
@@ -76,6 +78,14 @@ async function loadStats() {
   const fmtDate = (ms) => ms ? new Date(ms).toLocaleString() : "no clicks yet";
   $("analytics-summary").textContent = `First click: ${fmtDate(data.firstClickAt)} - Last click: ${fmtDate(data.lastClickAt)}`;
   drawChart(data.byDay || []);
+  lastStats = data;
+  renderBreakdown();
+  $("analytics").scrollIntoView({ behavior: "smooth" });
+}
+
+function renderBreakdown() {
+  const data = lastStats;
+  if (!data) return;
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const groupHtml = ([title, rows]) => `<div><h3>${title}</h3>${(rows || []).map((r) => `<p>${esc(r.k)}: <strong>${r.c}</strong></p>`).join("") || '<p class="muted">No clicks yet in this range.</p>'}</div>`;
   const sections = [
@@ -84,13 +94,13 @@ async function loadStats() {
     ["Traffic and timing", [["Referrer domain", data.byReferrerDomain], ["Referrer", data.byReferrer], ["Hour of day (UTC)", data.byHour], ["Day of week", data.byDayOfWeek]]],
     ["Network and edge", [["Network", data.byAsn], ["Edge location", data.byColo], ["TLS version", data.byTls]]],
   ];
-  const topOf = (groups) => {
-    let best = null;
-    for (const [, rows] of groups) for (const r of (rows || [])) if (!best || r.c > best.c) best = r;
-    return best ? `Top: ${esc(best.k)} (${best.c})` : "";
-  };
-  $("breakdown").innerHTML = sections.map(([title, groups], i) => `<details${i === 0 ? " open" : ""}><summary><span>${title}</span><span class="top">${topOf(groups)}</span></summary><div class="groups">${groups.map(groupHtml).join("")}</div></details>`).join("");
-  $("analytics").scrollIntoView({ behavior: "smooth" });
+  const sectionTotal = (groups) => groups.reduce((n, [, rows]) => n + (rows || []).reduce((m, r) => m + r.c, 0), 0);
+  if (currentSection >= sections.length) currentSection = 0;
+  $("breakdown").innerHTML = `<div class="analytics-layout"><nav class="analytics-nav" aria-label="Analytics categories">${sections.map(([title, groups], i) => `<button type="button" data-section="${i}" class="${i === currentSection ? "active" : ""}">${title}<span>${sectionTotal(groups)}</span></button>`).join("")}</nav><div class="analytics-pane" id="analytics-pane">${sections[currentSection][1].map(groupHtml).join("")}</div></div>`;
+  document.querySelectorAll("#analytics-nav button").forEach((b) => b.addEventListener("click", () => {
+    currentSection = Number(b.dataset.section);
+    renderBreakdown();
+  }));
 }
 
 function drawChart(byDay) {
