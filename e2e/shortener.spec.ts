@@ -119,6 +119,33 @@ test.describe("Edge URL Shortener", () => {
     expect(Array.isArray(data.byDay)).toBe(true);
     expect(Array.isArray(data.byCountry)).toBe(true);
     expect(Array.isArray(data.byReferrer)).toBe(true);
+    expect(data.byOs.map((r: { k: string }) => r.k)).toContain("Windows 10/11");
+    expect(data.byOs.map((r: { k: string }) => r.k)).toContain("iOS 17.0");
+    expect(data.byBrowserVersion.map((r: { k: string }) => r.k)).toContain("Chrome 120");
+    expect(data.byDeviceModel.map((r: { k: string }) => r.k)).toContain("iPhone");
+    expect(data.byBot.map((r: { k: string }) => r.k)).toContain("Human");
+    expect(data.byHour.length).toBeGreaterThanOrEqual(1);
+    expect(data.byHour[0].k).toMatch(/^\d{2}:00$/);
+    expect(data.byDayOfWeek.length).toBeGreaterThanOrEqual(1);
+    expect(data.byReferrerDomain.map((r: { k: string }) => r.k)).toContain("Direct");
+    expect(typeof data.firstClickAt).toBe("number");
+    expect(typeof data.lastClickAt).toBe("number");
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
+  test("@api bot clicks are counted separately from human clicks", async () => {
+    const ctx = await api();
+    const slug = uniq("bot");
+    const create = await createLink(ctx, { url: "https://example.com", slug });
+    expect(create.status()).toBe(201);
+    await ctx.get(`${baseURL}/${slug}`, {
+      maxRedirects: 0,
+      headers: { "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" },
+    });
+    const stats = await ctx.get(`${baseURL}/api/links/${slug}/stats?days=7`);
+    const data = await stats.json();
+    expect(data.byBot.map((r: { k: string }) => r.k)).toContain("Bot");
     await deleteLink(ctx, slug);
     await ctx.dispose();
   });
