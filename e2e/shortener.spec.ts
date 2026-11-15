@@ -285,6 +285,28 @@ test.describe("Edge URL Shortener", () => {
     await ctx.dispose();
   });
 
+  test("overview tiles count only your links", async ({ page }) => {
+    const slug = uniq("ui");
+    await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(slug);
+    await page.locator("#create-form button[type='submit']").click();
+    await expect(page.locator("#total-links")).toHaveText("1");
+    await expect(page.locator("#active-links")).toHaveText("1");
+    await expect(page.locator("#total-clicks")).toHaveText("0");
+    const other = uniq("other");
+    const ctx = await api();
+    const created = await createLink(ctx, { url: "https://example.org", slug: other });
+    expect(created.status(), await created.text()).toBe(201);
+    await page.reload();
+    await expect(page.locator("#total-links")).toHaveText("1");
+    await expect(page.locator("#active-links")).toHaveText("1");
+    await expect(page.locator("#total-clicks")).toHaveText("0");
+    await deleteLink(ctx, slug);
+    await deleteLink(ctx, other);
+    await ctx.dispose();
+  });
+
   test("search box filters the links list in the UI", async ({ page }) => {
     const token = uniq("ui");
     const slug = `${token}-a`;
