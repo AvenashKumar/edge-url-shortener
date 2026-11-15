@@ -270,6 +270,21 @@ test.describe("Edge URL Shortener", () => {
     await ctx.dispose();
   });
 
+  test("the short link in the list is clickable and opens the short URL", async ({ page }) => {
+    const slug = uniq("ui");
+    await page.goto("/");
+    await page.locator("#long-url").fill("https://example.com");
+    await page.locator("#slug").fill(slug);
+    await page.locator("#create-form button[type='submit']").click();
+    const link = page.locator(`.link-row a.short-link[href="${baseURL}/${slug}"]`);
+    await expect(link).toBeVisible();
+    await expect(link).toHaveText(`/${slug}`);
+    await expect(link).toHaveAttribute("target", "_blank");
+    const ctx = await api();
+    await deleteLink(ctx, slug);
+    await ctx.dispose();
+  });
+
   test("search box filters the links list in the UI", async ({ page }) => {
     const token = uniq("ui");
     const slug = `${token}-a`;
