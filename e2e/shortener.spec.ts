@@ -5,8 +5,8 @@ const proxyServer = process.env.HTTPS_PROXY || process.env.https_proxy;
 const api = () => request.newContext(proxyServer && !baseURL.includes("localhost") ? { proxy: { server: proxyServer } } : {});
 const uniq = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
-async function createLink(ctx: Awaited<ReturnType<typeof api>>, data: Record<string, unknown>) {
-  return ctx.post(`${baseURL}/api/links`, { data });
+async function createLink(ctx: Awaited<ReturnType<typeof api>>, data: Record<string, unknown>, headers?: Record<string, string>) {
+  return ctx.post(`${baseURL}/api/links`, { data, headers });
 }
 
 async function deleteLink(ctx: Awaited<ReturnType<typeof api>>, slug: string) {
@@ -40,6 +40,29 @@ test.describe("Edge URL Shortener", () => {
     const gone = await ctx.get(`${baseURL}/${slug}`, { maxRedirects: 0 });
     expect(gone.status()).toBe(404);
     await ctx.dispose();
+  });
+
+  test("@api the 100 link limit is per visitor, not global", async () => {
+    const ctx = await api();
+    const slug1 = uniq("vl");
+    const create1 = await createLink(ctx, { url: "https://example.com", slug: slug1 });
+    expect(create1.status(), await create1.text()).toBe(201);
+    const setCookie = create1.headers()["set-cookie"] || "";
+    expect(setCookie).toContain("visitor_id=");
+    const visitorId = setCookie.match(/visitor_id=([A-Za-z0-9-]+)/)?.[1];
+    expect(visitorId).toBeTruthy();
+    const slug2 = uniq("vl");
+    const create2 = await createLink(ctx, { url: "https://example.com", slug: slug2 }, { cookie: `visitor_id=${visitorId}` });
+    expect(create2.status(), await create2.text()).toBe(201);
+    const ctx2 = await api();
+    const slug3 = uniq("vl");
+    const create3 = await createLink(ctx2, { url: "https://example.com", slug: slug3 });
+    expect(create3.status(), await create3.text()).toBe(201);
+    await deleteLink(ctx, slug1);
+    await deleteLink(ctx, slug2);
+    await deleteLink(ctx2, slug3);
+    await ctx.dispose();
+    await ctx2.dispose();
   });
 
   test("@api create without a slug generates a random one", async () => {
