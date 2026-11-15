@@ -6,13 +6,19 @@ export interface Env {
 
 const SLUG_RE = /^[a-zA-Z0-9_-]{3,64}$/;
 const RESERVED = new Set(["api", "admin", "assets", "static", "health", "login", "signup"]);
-const MAX_LINKS = 100;
+const MAX_LINKS_PER_VISITOR = 100;
 
-function json(data: unknown, status = 200): Response {
+function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8", ...headers },
   });
+}
+
+function visitorIdFrom(request: Request): string | null {
+  const cookie = request.headers.get("cookie") || "";
+  const m = cookie.match(/(?:^|;\s*)visitor_id=([A-Za-z0-9-]{36})/);
+  return m ? m[1] : null;
 }
 
 function randomSlug(length = 6): string {
@@ -135,20 +141,22 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ error: "Click limit must be a whole number of 1 or more" }, 400);
     }
 
-    const count = await env.DB.prepare("SELECT COUNT(*) AS c FROM links").first() as any;
-    if ((count?.c || 0) >= MAX_LINKS) {
-      return json({ error: "Link limit reached. This service is limited to 100 links in total. Delete an old link to create a new one." }, 429);
+    const visitorId = visitorIdFrom(request) || crypto.randomUUID();
+    const visitorCookie = `visitor_id=${visitorId}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${url.protocol === "https:" ? "; Secure" : ""}`;
+    const count = await env.DB.prepare("SELECT COUNT(*) AS c FROM links WHERE visitor_id = ?").bind(visitorId).first() as any;
+    if ((count?.c || 0) >= MAX_LINKS_PER_VISITOR) {
+      return json({ error: "You have reached your limit of 100 links. Delete one of your links to create a new one." }, 429, { "set-cookie": visitorCookie });
     }
 
     try {
       await env.DB.prepare(
-        "INSERT INTO links (id, slug, url, created_at, expires_at, max_clicks) VALUES (?, ?, ?, ?, ?, ?)"
-      ).bind(id, slug, target.toString(), now, expiresAt || null, maxClicks).run();
+        "INSERT INTO links (id, slug, url, created_at, expires_at, max_clicks, visitor_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).bind(id, slug, target.toString(), now, expiresAt || null, maxClicks, visitorId).run();
     } catch {
       return json({ error: "That slug is already taken. Try another one." }, 409);
     }
     const base = env.BASE_URL.replace(/\/$/, "");
-    return json({ id, slug, url: target.toString(), shortUrl: `${base}/${slug}`, createdAt: now, expiresAt, maxClicks, clickCount: 0, paused: false }, 201);
+    return json({ id, slug, url: target.toString(), shortUrl: `${base}/${slug}`, createdAt: now, expiresAt, maxClicks, clickCount: 0, paused: false }, 201, { "set-cookie": visitorCookie });
   }
 
   if (parts[1] === "stats" && request.method === "GET" && parts.length === 2) {
