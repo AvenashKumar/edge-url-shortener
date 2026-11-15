@@ -22,10 +22,6 @@ function removeMyLink(slug) {
 async function loadLinks() {
   const search = $("search").value.trim();
   const filter = $("filter").value;
-  const stats = await (await fetch("/api/stats")).json().catch(() => ({}));
-  $("total-links").textContent = stats.totalLinks || 0;
-  $("total-clicks").textContent = stats.totalClicks || 0;
-  $("active-links").textContent = stats.activeLinks || 0;
   const mySlugs = readMySlugs().map((x) => x.slug);
   let links = [];
   if (mySlugs.length) {
@@ -37,6 +33,11 @@ async function loadLinks() {
     const found = (await res.json()).links || [];
     if (found.length) { saveMyLink({ slug: found[0].slug, url: found[0].url, createdAt: found[0].created_at }); links = links.concat(found); }
   }
+  const now = Date.now();
+  const isActive = (l) => !l.paused && (!l.expires_at || l.expires_at > now) && (!l.max_clicks || l.click_count < l.max_clicks);
+  $("total-links").textContent = links.length;
+  $("total-clicks").textContent = links.reduce((n, l) => n + (l.click_count || 0), 0);
+  $("active-links").textContent = links.filter(isActive).length;
   const q = search.toLowerCase();
   if (q) links = links.filter((l) => l.slug.toLowerCase().includes(q) || l.url.toLowerCase().includes(q));
   if (filter === "paused") links = links.filter((l) => l.paused);
