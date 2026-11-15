@@ -51,7 +51,7 @@ Do not paste tokens or account IDs in chat. Add them only in GitHub Secrets.
 
 - `POST /api/links` with `{ url, slug, expiresAt, maxClicks }`
 - `POST /api/links/lookup` with `{ slugs: [] }`, returns only the requested links. There is no endpoint that lists every link, so no visitor can enumerate other people's links. The frontend stores the slugs you create in your browser's localStorage and looks those up.
-- `GET /api/stats` returns only totals: totalLinks, totalClicks, activeLinks
+- `GET /api/stats` returns only service-wide totals: totalLinks, totalClicks, activeLinks. The overview tiles on the homepage do not use it; they count only the links created in your browser, so they never show other people's totals.
 - `GET /api/links/:slug/stats?days=7`
 - `PATCH /api/links/:slug` with `{ paused }`
 - `DELETE /api/links/:slug`
