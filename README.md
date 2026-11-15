@@ -11,6 +11,7 @@ No signup is needed to use the live site. The code is open for review and for le
 - Redirects at the edge, with click tracking for country, device, browser, and referrer
 - Dashboard with total clicks, top links, and 7, 14, and 30 day charts
 - Search and filter links, copy, pause and resume, and per link analytics
+- Limit of 100 links per visitor, not per service. The Worker sets a first-party `visitor_id` cookie (a random id, HttpOnly, one year, used only to count that visitor's links) and counts only links created with that id. Links created before visitor ids existed do not count toward anyone's limit. Deleting one of your links frees a slot.
 - Analytics breakdowns per link: country, device, browser, operating system, browser version, device model, bot or human, city, region, timezone, network (ASN), edge location, TLS version, hour of day (UTC), day of week, referrer domain, and first and last click. All shown as aggregated counts, never individual click rows. City, region, timezone, network, edge location, and TLS version come from Cloudflare and are stored per click; older clicks recorded before this change show as Unknown for those fields.
 - Pause, expiry, and click limit checks on every redirect
 
