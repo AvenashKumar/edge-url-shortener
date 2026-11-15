@@ -96,7 +96,7 @@ function renderBreakdown() {
   ];
   const sectionTotal = (groups) => groups.reduce((n, [, rows]) => n + (rows || []).reduce((m, r) => m + r.c, 0), 0);
   if (currentSection >= sections.length) currentSection = 0;
-  $("breakdown").innerHTML = `<div class="analytics-layout"><nav class="analytics-nav" aria-label="Analytics categories">${sections.map(([title, groups], i) => `<button type="button" data-section="${i}" class="${i === currentSection ? "active" : ""}">${title}<span>${sectionTotal(groups)}</span></button>`).join("")}</nav><div class="analytics-pane" id="analytics-pane">${sections[currentSection][1].map(groupHtml).join("")}</div></div>`;
+  $("breakdown").innerHTML = `<div class="analytics-layout"><nav id="analytics-nav" class="analytics-nav" aria-label="Analytics categories">${sections.map(([title, groups], i) => `<button type="button" data-section="${i}" class="${i === currentSection ? "active" : ""}">${title}<span>${sectionTotal(groups)}</span></button>`).join("")}</nav><div class="analytics-pane" id="analytics-pane">${sections[currentSection][1].map(groupHtml).join("")}</div></div>`;
   document.querySelectorAll("#analytics-nav button").forEach((b) => b.addEventListener("click", () => {
     currentSection = Number(b.dataset.section);
     renderBreakdown();
