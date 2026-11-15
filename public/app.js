@@ -48,7 +48,7 @@ async function loadLinks() {
   }
   list.innerHTML = links.map((l) => `
     <div class="link-row">
-      <div><strong>/${l.slug}</strong> <span class="muted">${l.click_count} clicks</span><br>
+      <div><a class="short-link" href="${location.origin}/${l.slug}" target="_blank" rel="noreferrer">/${l.slug}</a> <span class="muted">${l.click_count} clicks</span><br>
       <a href="${l.url}" target="_blank" rel="noreferrer">${l.url}</a></div>
       <div class="link-actions">
         <button class="btn" data-copy="${location.origin}/${l.slug}">Copy</button>
